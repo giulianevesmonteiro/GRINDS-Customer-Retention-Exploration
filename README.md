@@ -2,13 +2,6 @@
 As part of our short-term consulting immersion week, my team and I worked with the Indiana company, Grinds. We reviewed their data and built models to analyze market trends to develop insights regarding analytics, growth strategies, and market opportunities. We wanted to build a model that predicted the customers likely to return so the company could use it to then target those customers with specific marketing strategies tailored to increase repeat customers, sales, and average order values. 
 
 
----
-title: "Grinds Exploration on Client Retention"
-author: "Alex Heck, Tom Zwiller, Giulia Neves Monteiro, Aziz Al Mezraani, Madison Bradley"
-date: "`r Sys.Date()`"
-output: html_document
----
-
 ## Importing the relevant packages needed:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
