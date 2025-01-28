@@ -11,7 +11,7 @@
 
 <meta name="author" content="Alex Heck, Tom Zwiller, Giulia Neves Monteiro, Aziz Al Mezraani, Madison Bradley" />
 
-<meta name="date" content="2024-12-18" />
+<meta name="date" content="2025-01-27" />
 
 <title>Grinds Exploration on Client Retention</title>
 
@@ -353,7 +353,7 @@ display: none;
 <h1 class="title toc-ignore">Grinds Exploration on Client Retention</h1>
 <h4 class="author">Alex Heck, Tom Zwiller, Giulia Neves Monteiro, Aziz
 Al Mezraani, Madison Bradley</h4>
-<h4 class="date">2024-12-18</h4>
+<h4 class="date">2025-01-27</h4>
 
 </div>
 
@@ -363,15 +363,16 @@ Al Mezraani, Madison Bradley</h4>
 </div>
 <div id="data-preparation" class="section level2">
 <h2>Data Preparation</h2>
-<pre class="r"><code># Read it in, but not as a factor
+<pre class="r"><code># Read the CSV file into a data frame
 returning_data1 = read.csv(&quot;C:\\Users\\Graduate\\Downloads\\sales_2023-12-01_2024-11-01_Grinds Confidential.csv&quot;, header = TRUE)
 
-# This removes the net_quantity rows that are less than 0! We kept exactly 0 because that suggests returns
+# Filter out rows where net_quantity is less than 0, keeping only those with zero (indicating returns)
 returning_data1 &lt;- returning_data1[returning_data1$net_quantity &gt;= 0, ]
 
 # Cleaning column names and removing the special attributes
 colnames(returning_data1) &lt;- make.names(colnames(returning_data1))
 
+# Convert the product_title column to UTF-8 encoding, removing invalid characters
 Encoding(returning_data1$product_title) &lt;- &quot;UTF-8&quot;
 
 returning_data1$product_title &lt;- iconv(returning_data1$product_title, 
@@ -380,40 +381,34 @@ returning_data1$product_title &lt;- iconv(returning_data1$product_title,
 returning_data1$product_title &lt;- gsub(&quot;^\\W\\s&quot;, &quot;&quot;, returning_data1$product_title, perl = TRUE)
 
 
-# Substitute all region names not found in US states to international
+# Replace billing_region names not found in the list of US states with &#39;International&#39;
 returning_data1$billing_region &lt;- ifelse(!(returning_data1$billing_region %in% state.name), &quot;International&quot;, returning_data1$billing_region)
 
 # Remove blanks in product_vendor
 returning_data1 &lt;- returning_data1[returning_data1$product_vendor != &quot;&quot;, ]
 
-# Convert Product Title column to lowercase
+# Convert all product titles to lowercase to standardize the data
 returning_data1$product_title &lt;- tolower(returning_data1$product_title)
 
-# Rename
+# Rename specific product titles for consistency
 returning_data1$product_title[returning_data1$product_title == &#39;grinds coffee pouches - vanilla&#39;] &lt;- &#39;vanilla&#39;
-
-# Rename
 returning_data1$product_title[returning_data1$product_title == &#39;grinds coffee pouches - 3pack variety with double mocha, sweet mint and cinnamon roll&#39;] &lt;- &#39;3 pack variety&#39;
-
-# Rename
 returning_data1$product_title[returning_data1$product_title == &#39;3-pack energy sampler&#39;] &lt;- &#39;3 pack energy sampler&#39;
-
-# Rename
 returning_data1$product_title[returning_data1$product_title == &#39;Mocha&#39;] &lt;- &#39;DoubleMocha&#39;
 
 # Remove dashes
 returning_data1$product_title &lt;- gsub(&quot;-.*&quot;, &quot;&quot;, returning_data1$product_title)
 
-# Convert to title case for better readability
+# Convert product titles to title case for better readability
 returning_data1$product_title &lt;- str_to_title(returning_data1$product_title)
 
-# Remove spaces
+# Convert product titles to title case for better readability
 returning_data1$product_title &lt;- gsub(&quot; &quot;, &quot;&quot;, returning_data1$product_title)
 
 # Remove &#39;100% off&#39;
 returning_data1$product_title &lt;- gsub(&quot;\\(100%off\\)&quot;, &quot;&quot;, returning_data1$product_title, ignore.case = TRUE)
 
-# View
+# Display the first few rows of the cleaned data frame
 head(returning_data1)</code></pre>
 <pre><code>##   product_title        product_vendor  customer_id customer_type  billing_city
 ## 1   BlackCoffee                grinds 3.004030e+12     Returning    Woodbridge
@@ -489,19 +484,22 @@ response variables in both training and test sets.</p>
 ## 
 ##     intersect, setdiff, setequal, union</code></pre>
 <pre class="r"><code>returning_data &lt;- returning_data1 %&gt;% 
-  select(-customer_id, -billing_city, -product_vendor) %&gt;%  # Removing unnecessary variables that will not contribute to the logistic regression development
-  mutate(customer_type = ifelse(customer_type == &quot;First-time&quot;, 0, 1)) # converting response variable to a binary number 0 or 1
+  select(-customer_id, -billing_city, -product_vendor) %&gt;%  # Remove variables that are not necessary for the model
+  mutate(customer_type = ifelse(customer_type == &quot;First-time&quot;, 0, 1)) # Convert customer_type to binary format (0: First-time, 1: Returning)
           
+# Split the data into training and testing sets while maintaining the proportion of the customer_type variable
 split_data &lt;- stratified(returning_data, 
                         group = c(&quot;customer_type&quot;), 
                         size = 0.8, bothSets = TRUE)</code></pre>
 <p>Partitioning data to training and test sets:</p>
-<pre class="r"><code>train_data &lt;- as.data.frame(na.omit(split_data[[1]]))
+<pre class="r"><code># removing any rows with NA values
+train_data &lt;- as.data.frame(na.omit(split_data[[1]]))
 
 test_data &lt;- na.omit(split_data[[2]])</code></pre>
 </div>
 <div id="logsitic-regression" class="section level2">
 <h2>Logsitic Regression</h2>
+<p>Fit a logistic regression model to predict customer_type</p>
 <pre class="r"><code>fit_1 &lt;- glm(customer_type ~ discounts+returns+billing_region, # Set formula
              family=binomial, # Set logistic regression
              data= train_data) # Set data set
@@ -514,93 +512,96 @@ t1</code></pre>
 ## 
 ## Coefficients:
 ##                               Estimate Std. Error z value Pr(&gt;|z|)    
-## (Intercept)                  -0.363139   0.028542 -12.723  &lt; 2e-16 ***
-## discounts                    -0.019606   0.001647 -11.901  &lt; 2e-16 ***
-## returns                      -0.010122   0.001852  -5.464 4.65e-08 ***
-## billing_regionAlaska          0.055879   0.066420   0.841 0.400187    
-## billing_regionArizona         0.069505   0.039732   1.749 0.080227 .  
-## billing_regionArkansas       -0.085828   0.050869  -1.687 0.091558 .  
-## billing_regionCalifornia     -0.014945   0.032850  -0.455 0.649144    
-## billing_regionColorado        0.060473   0.038123   1.586 0.112680    
-## billing_regionConnecticut     0.112317   0.046318   2.425 0.015312 *  
-## billing_regionDelaware        0.228904   0.069188   3.308 0.000938 ***
-## billing_regionFlorida         0.101945   0.033723   3.023 0.002503 ** 
-## billing_regionGeorgia         0.191410   0.036070   5.307 1.12e-07 ***
-## billing_regionHawaii         -0.072232   0.073634  -0.981 0.326610    
-## billing_regionIdaho           0.231312   0.047193   4.901 9.51e-07 ***
-## billing_regionIllinois        0.172001   0.036904   4.661 3.15e-06 ***
-## billing_regionIndiana         0.194356   0.037163   5.230 1.70e-07 ***
-## billing_regionInternational  -0.320241   0.031797 -10.071  &lt; 2e-16 ***
-## billing_regionIowa            0.362503   0.045255   8.010 1.15e-15 ***
-## billing_regionKansas          0.325043   0.045887   7.084 1.40e-12 ***
-## billing_regionKentucky        0.035930   0.042424   0.847 0.397032    
-## billing_regionLouisiana       0.038097   0.042780   0.891 0.373175    
-## billing_regionMaine           0.074840   0.055947   1.338 0.180995    
-## billing_regionMaryland        0.189855   0.041601   4.564 5.03e-06 ***
-## billing_regionMassachusetts   0.034771   0.040903   0.850 0.395281    
-## billing_regionMichigan        0.201594   0.036339   5.548 2.90e-08 ***
-## billing_regionMinnesota       0.123310   0.040521   3.043 0.002342 ** 
-## billing_regionMississippi    -0.020177   0.048579  -0.415 0.677885    
-## billing_regionMissouri        0.161421   0.040128   4.023 5.75e-05 ***
-## billing_regionMontana         0.367803   0.055922   6.577 4.80e-11 ***
-## billing_regionNebraska        0.343825   0.051749   6.644 3.05e-11 ***
-## billing_regionNevada          0.330389   0.048902   6.756 1.42e-11 ***
-## billing_regionNew Hampshire   0.198913   0.055219   3.602 0.000316 ***
-## billing_regionNew Jersey     -0.110548   0.039210  -2.819 0.004811 ** 
-## billing_regionNew Mexico      0.274182   0.050750   5.403 6.57e-08 ***
-## billing_regionNew York        0.038336   0.033741   1.136 0.255881    
-## billing_regionNorth Carolina  0.146240   0.035484   4.121 3.77e-05 ***
-## billing_regionNorth Dakota    0.221854   0.064129   3.459 0.000541 ***
-## billing_regionOhio            0.246323   0.033013   7.461 8.56e-14 ***
-## billing_regionOklahoma        0.236066   0.041973   5.624 1.86e-08 ***
-## billing_regionOregon          0.221372   0.044350   4.991 5.99e-07 ***
-## billing_regionPennsylvania    0.124769   0.032644   3.822 0.000132 ***
-## billing_regionRhode Island    0.162118   0.079993   2.027 0.042698 *  
-## billing_regionSouth Carolina  0.129988   0.040500   3.210 0.001329 ** 
-## billing_regionSouth Dakota    0.278768   0.064947   4.292 1.77e-05 ***
-## billing_regionTennessee       0.166837   0.035900   4.647 3.36e-06 ***
-## billing_regionTexas           0.174363   0.031905   5.465 4.63e-08 ***
-## billing_regionUtah           -0.023409   0.048090  -0.487 0.626423    
-## billing_regionVermont        -0.102294   0.080054  -1.278 0.201315    
-## billing_regionVirginia        0.036385   0.036506   0.997 0.318918    
-## billing_regionWashington      0.112703   0.038266   2.945 0.003227 ** 
-## billing_regionWest Virginia   0.097615   0.046374   2.105 0.035298 *  
-## billing_regionWisconsin       0.216779   0.037215   5.825 5.71e-09 ***
-## billing_regionWyoming         0.233082   0.060625   3.845 0.000121 ***
+## (Intercept)                  -0.362746   0.028361 -12.791  &lt; 2e-16 ***
+## discounts                    -0.018800   0.001643 -11.444  &lt; 2e-16 ***
+## returns                      -0.010620   0.001856  -5.722 1.05e-08 ***
+## billing_regionAlaska          0.012845   0.066697   0.193 0.847284    
+## billing_regionArizona         0.043299   0.039672   1.091 0.275096    
+## billing_regionArkansas       -0.112887   0.050953  -2.216 0.026726 *  
+## billing_regionCalifornia     -0.033331   0.032727  -1.018 0.308467    
+## billing_regionColorado        0.047162   0.038047   1.240 0.215135    
+## billing_regionConnecticut     0.108020   0.046083   2.344 0.019075 *  
+## billing_regionDelaware        0.248716   0.069421   3.583 0.000340 ***
+## billing_regionFlorida         0.100260   0.033560   2.988 0.002813 ** 
+## billing_regionGeorgia         0.173018   0.035887   4.821 1.43e-06 ***
+## billing_regionHawaii         -0.053039   0.074612  -0.711 0.477168    
+## billing_regionIdaho           0.229251   0.047001   4.878 1.07e-06 ***
+## billing_regionIllinois        0.147608   0.036844   4.006 6.17e-05 ***
+## billing_regionIndiana         0.182252   0.036997   4.926 8.39e-07 ***
+## billing_regionInternational  -0.331751   0.031627 -10.489  &lt; 2e-16 ***
+## billing_regionIowa            0.368444   0.045103   8.169 3.11e-16 ***
+## billing_regionKansas          0.362637   0.045862   7.907 2.63e-15 ***
+## billing_regionKentucky        0.056008   0.042091   1.331 0.183310    
+## billing_regionLouisiana       0.043727   0.042569   1.027 0.304326    
+## billing_regionMaine           0.088958   0.055921   1.591 0.111656    
+## billing_regionMaryland        0.198408   0.041497   4.781 1.74e-06 ***
+## billing_regionMassachusetts   0.005689   0.040858   0.139 0.889268    
+## billing_regionMichigan        0.200521   0.036156   5.546 2.92e-08 ***
+## billing_regionMinnesota       0.126802   0.040343   3.143 0.001672 ** 
+## billing_regionMississippi     0.002442   0.048460   0.050 0.959814    
+## billing_regionMissouri        0.134906   0.040061   3.368 0.000759 ***
+## billing_regionMontana         0.372701   0.055829   6.676 2.46e-11 ***
+## billing_regionNebraska        0.398968   0.051472   7.751 9.10e-15 ***
+## billing_regionNevada          0.348105   0.048738   7.142 9.17e-13 ***
+## billing_regionNew Hampshire   0.198744   0.055250   3.597 0.000322 ***
+## billing_regionNew Jersey     -0.090001   0.039099  -2.302 0.021343 *  
+## billing_regionNew Mexico      0.267995   0.050775   5.278 1.31e-07 ***
+## billing_regionNew York        0.055330   0.033573   1.648 0.099341 .  
+## billing_regionNorth Carolina  0.145222   0.035338   4.110 3.97e-05 ***
+## billing_regionNorth Dakota    0.296243   0.064389   4.601 4.21e-06 ***
+## billing_regionOhio            0.260886   0.032850   7.942 1.99e-15 ***
+## billing_regionOklahoma        0.237625   0.042057   5.650 1.60e-08 ***
+## billing_regionOregon          0.217713   0.044102   4.937 7.95e-07 ***
+## billing_regionPennsylvania    0.111751   0.032529   3.435 0.000592 ***
+## billing_regionRhode Island    0.214167   0.079396   2.697 0.006987 ** 
+## billing_regionSouth Carolina  0.139049   0.040326   3.448 0.000565 ***
+## billing_regionSouth Dakota    0.365159   0.064678   5.646 1.64e-08 ***
+## billing_regionTennessee       0.175668   0.035704   4.920 8.65e-07 ***
+## billing_regionTexas           0.179705   0.031758   5.659 1.53e-08 ***
+## billing_regionUtah            0.009007   0.047605   0.189 0.849931    
+## billing_regionVermont        -0.126621   0.079906  -1.585 0.113051    
+## billing_regionVirginia        0.040039   0.036289   1.103 0.269886    
+## billing_regionWashington      0.133283   0.038126   3.496 0.000473 ***
+## billing_regionWest Virginia   0.110410   0.046378   2.381 0.017281 *  
+## billing_regionWisconsin       0.221912   0.037077   5.985 2.16e-09 ***
+## billing_regionWyoming         0.227707   0.060936   3.737 0.000186 ***
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## 
 ## (Dispersion parameter for binomial family taken to be 1)
 ## 
 ##     Null deviance: 397275  on 289937  degrees of freedom
-## Residual deviance: 395472  on 289885  degrees of freedom
-## AIC: 395578
+## Residual deviance: 395351  on 289885  degrees of freedom
+## AIC: 395457
 ## 
 ## Number of Fisher Scoring iterations: 4</code></pre>
-<p>Analyzing the coefficients to see which are significant:</p>
+<p>Analyzing the coefficients to see which are significant (greater tha
+0.01):</p>
 <pre class="r"><code>t1$coefficients[which(t1$coefficients[,4] &gt;= 0.01),]</code></pre>
-<pre><code>##                                Estimate Std. Error    z value   Pr(&gt;|z|)
-## billing_regionAlaska         0.05587870 0.06642043  0.8412879 0.40018669
-## billing_regionArizona        0.06950520 0.03973153  1.7493714 0.08022685
-## billing_regionArkansas      -0.08582811 0.05086900 -1.6872381 0.09155758
-## billing_regionCalifornia    -0.01494518 0.03285002 -0.4549520 0.64914379
-## billing_regionColorado       0.06047337 0.03812325  1.5862594 0.11268049
-## billing_regionConnecticut    0.11231750 0.04631793  2.4249251 0.01531155
-## billing_regionHawaii        -0.07223225 0.07363394 -0.9809642 0.32661041
-## billing_regionKentucky       0.03593025 0.04242396  0.8469330 0.39703249
-## billing_regionLouisiana      0.03809716 0.04277978  0.8905411 0.37317542
-## billing_regionMaine          0.07484029 0.05594709  1.3376975 0.18099507
-## billing_regionMassachusetts  0.03477071 0.04090288  0.8500798 0.39528072
-## billing_regionMississippi   -0.02017715 0.04857857 -0.4153508 0.67788509
-## billing_regionNew York       0.03833550 0.03374065  1.1361815 0.25588062
-## billing_regionRhode Island   0.16211754 0.07999297  2.0266473 0.04269849
-## billing_regionUtah          -0.02340880 0.04809031 -0.4867674 0.62642317
-## billing_regionVermont       -0.10229380 0.08005367 -1.2778152 0.20131458
-## billing_regionVirginia       0.03638489 0.03650599  0.9966830 0.31891843
-## billing_regionWest Virginia  0.09761471 0.04637445  2.1049243 0.03529790</code></pre>
+<pre><code>##                                 Estimate Std. Error     z value   Pr(&gt;|z|)
+## billing_regionAlaska         0.012844925 0.06669739  0.19258510 0.84728391
+## billing_regionArizona        0.043298588 0.03967245  1.09140179 0.27509612
+## billing_regionArkansas      -0.112887179 0.05095333 -2.21550158 0.02672566
+## billing_regionCalifornia    -0.033330740 0.03272711 -1.01844447 0.30846678
+## billing_regionColorado       0.047162023 0.03804709  1.23956982 0.21513455
+## billing_regionConnecticut    0.108020182 0.04608255  2.34405840 0.01907518
+## billing_regionHawaii        -0.053038903 0.07461177 -0.71086506 0.47716786
+## billing_regionKentucky       0.056008244 0.04209144  1.33063250 0.18330996
+## billing_regionLouisiana      0.043726840 0.04256898  1.02719959 0.30432649
+## billing_regionMaine          0.088958398 0.05592070  1.59079554 0.11165560
+## billing_regionMassachusetts  0.005688656 0.04085773  0.13923083 0.88926775
+## billing_regionMississippi    0.002441783 0.04846036  0.05038722 0.95981382
+## billing_regionNew Jersey    -0.090000621 0.03909917 -2.30185485 0.02134336
+## billing_regionNew York       0.055329534 0.03357256  1.64805815 0.09934074
+## billing_regionUtah           0.009007163 0.04760499  0.18920626 0.84993116
+## billing_regionVermont       -0.126621078 0.07990589 -1.58462750 0.11305099
+## billing_regionVirginia       0.040038776 0.03628920  1.10332489 0.26988610
+## billing_regionWest Virginia  0.110409956 0.04637780  2.38066370 0.01728148</code></pre>
 </div>
 <div id="model-evaluation" class="section level2">
 <h2>Model Evaluation</h2>
+<p>Use the test data for predictions and evaluate the model’s
+performance</p>
 <pre class="r"><code>library(caret)
 
 fit_1_pred &lt;- predict(fit_1, newdata=test_data, type=&#39;response&#39;)</code></pre>
@@ -609,7 +610,7 @@ fit_1_pred &lt;- predict(fit_1, newdata=test_data, type=&#39;response&#39;)</cod
 <pre class="r"><code># To simplify our comparison, get the results in an easier format:
 print(c(lm_full_acc$overall[1], lm_full_acc$byClass[1:2]))</code></pre>
 <pre><code>##    Accuracy Sensitivity Specificity 
-##  0.56537995  0.02126315  0.98714275</code></pre>
+##  0.56412450  0.04423241  0.96710994</code></pre>
 <p>The logistic regression doesn’t provide great accuracy, having only a
 58.5% score. Many variables couldn’t be included as well since their
 coefficient values were so high that they were not allowing the logistic
@@ -618,19 +619,19 @@ regression to create a sigmoid function and run it’s model.</p>
 </div>
 <div id="gam" class="section level2">
 <h2>GAM</h2>
-<p>Convert to factors</p>
+<p>Convert some variables to factors</p>
 <pre class="r"><code>returning_data1$product_title &lt;- as.factor(returning_data1$product_title)
 returning_data1$customer_type &lt;- as.factor(returning_data1$customer_type)
 returning_data1$billing_region &lt;- as.factor(returning_data1$billing_region)</code></pre>
-<p>Adjusting one product title name:</p>
+<p>Adjusting some product titles:</p>
 <pre class="r"><code># Rename
 returning_data1$product_title[returning_data1$product_title == &#39;mocha&#39;] &lt;- &#39;doublemocha&#39;</code></pre>
 <pre><code>## Warning in `[&lt;-.factor`(`*tmp*`, returning_data1$product_title == &quot;mocha&quot;, :
 ## invalid factor level, NA generated</code></pre>
-<pre class="r"><code>returning_data1$product_title[returning_data1$product_title == &#39;cherry&#39;] &lt;- &#39;peach&#39; # putting it with another fruity flavor since there isn&#39;t any other that&#39;s similar. </code></pre>
+<pre class="r"><code>returning_data1$product_title[returning_data1$product_title == &#39;cherry&#39;] &lt;- &#39;peach&#39; # putting it with another fruity flavor since there isn&#39;t any other to substitute it with</code></pre>
 <pre><code>## Warning in `[&lt;-.factor`(`*tmp*`, returning_data1$product_title == &quot;cherry&quot;, :
 ## invalid factor level, NA generated</code></pre>
-<p>Sample:</p>
+<p>Sample data and removing NA values:</p>
 <pre class="r"><code>split_data1 &lt;- stratified(returning_data1, 
                         group = c(&quot;customer_type&quot;), 
                         size = 0.8, bothSets = TRUE)
@@ -652,6 +653,7 @@ test$discounts_per &lt;- abs(test$discounts/test$gross_sales)
 # Build on train data
 gam1 &lt;- gam(customer_type~product_title+billing_region+s(net_quantity)+s(discounts_per)+s(returns)+s(total_sales), family = &#39;binomial&#39;, data = train)
 
+# Get the summary of the model
 summary(gam1)</code></pre>
 <pre><code>## 
 ## Call: gam(formula = customer_type ~ product_title + billing_region + 
@@ -659,25 +661,25 @@ summary(gam1)</code></pre>
 ##     family = &quot;binomial&quot;, data = train)
 ## Deviance Residuals:
 ##     Min      1Q  Median      3Q     Max 
-## -3.0033 -0.9877 -0.7336  1.1660  2.8757 
+## -3.1889 -0.9886 -0.7367  1.1705  2.9328 
 ## 
 ## (Dispersion Parameter for binomial family taken to be 1)
 ## 
 ##     Null Deviance: 397274.9 on 289937 degrees of freedom
-## Residual Deviance: 358714.1 on 289813 degrees of freedom
-## AIC: 358964.1 
+## Residual Deviance: 358690.9 on 289813 degrees of freedom
+## AIC: 358940.9 
 ## 
 ## Number of Local Scoring Iterations: NA 
 ## 
 ## Anova for Parametric Effects
-##                      Df Sum Sq Mean Sq   F value    Pr(&gt;F)    
-## product_title        58   9856   169.9   171.382 &lt; 2.2e-16 ***
-## billing_region       50    983    19.7    19.835 &lt; 2.2e-16 ***
-## s(net_quantity)       1   9952  9952.3 10037.121 &lt; 2.2e-16 ***
-## s(discounts_per)      1   1385  1384.6  1396.419 &lt; 2.2e-16 ***
-## s(returns)            1    428   428.0   431.615 &lt; 2.2e-16 ***
-## s(total_sales)        1   3136  3135.6  3162.349 &lt; 2.2e-16 ***
-## Residuals        289813 287364     1.0                        
+##                      Df Sum Sq Mean Sq  F value    Pr(&gt;F)    
+## product_title        58   9498   163.8  164.852 &lt; 2.2e-16 ***
+## billing_region       50   1001    20.0   20.148 &lt; 2.2e-16 ***
+## s(net_quantity)       1   9464  9463.8 9527.036 &lt; 2.2e-16 ***
+## s(discounts_per)      1   1123  1123.4 1130.896 &lt; 2.2e-16 ***
+## s(returns)            1    394   394.1  396.779 &lt; 2.2e-16 ***
+## s(total_sales)        1   3486  3486.3 3509.621 &lt; 2.2e-16 ***
+## Residuals        289813 287889     1.0                       
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## 
@@ -686,41 +688,43 @@ summary(gam1)</code></pre>
 ## (Intercept)                                      
 ## product_title                                    
 ## billing_region                                   
-## s(net_quantity)        3    1608.03 &lt; 2.2e-16 ***
-## s(discounts_per)       3    2076.44 &lt; 2.2e-16 ***
-## s(returns)             3     497.39 &lt; 2.2e-16 ***
-## s(total_sales)         3    1860.68 &lt; 2.2e-16 ***
+## s(net_quantity)        3    1756.18 &lt; 2.2e-16 ***
+## s(discounts_per)       3    2082.25 &lt; 2.2e-16 ***
+## s(returns)             3     520.27 &lt; 2.2e-16 ***
+## s(total_sales)         3    1440.28 &lt; 2.2e-16 ***
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
 <pre class="r"><code>#plot(gam1, col=&#39;blue&#39;)</code></pre>
-<pre class="r"><code># Evaluation on test data
-gam1_pred &lt;- predict(gam1, newdata=test, type=&#39;response&#39;)
+</div>
+<div id="evaluation-on-test-data" class="section level1">
+<h1>Evaluation on test data</h1>
+<pre class="r"><code>gam1_pred &lt;- predict(gam1, newdata=test, type=&#39;response&#39;)
 gam1_acc &lt;- confusionMatrix(factor(ifelse(gam1_pred&gt;0.5, &#39;Returning&#39;, &#39;First-time&#39;)), test$customer_type, positive=&#39;Returning&#39;)
 print(gam1_acc)</code></pre>
 <pre><code>## Confusion Matrix and Statistics
 ## 
 ##             Reference
 ## Prediction   First-time Returning
-##   First-time      33084     17695
-##   Returning        7749     13956
+##   First-time      33307     17854
+##   Returning        7526     13797
 ##                                           
-##                Accuracy : 0.649           
-##                  95% CI : (0.6455, 0.6524)
+##                Accuracy : 0.6499          
+##                  95% CI : (0.6464, 0.6533)
 ##     No Information Rate : 0.5633          
 ##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16       
 ##                                           
-##                   Kappa : 0.2604          
+##                   Kappa : 0.2612          
 ##                                           
 ##  Mcnemar&#39;s Test P-Value : &lt; 2.2e-16       
 ##                                           
-##             Sensitivity : 0.4409          
-##             Specificity : 0.8102          
-##          Pos Pred Value : 0.6430          
-##          Neg Pred Value : 0.6515          
+##             Sensitivity : 0.4359          
+##             Specificity : 0.8157          
+##          Pos Pred Value : 0.6470          
+##          Neg Pred Value : 0.6510          
 ##              Prevalence : 0.4367          
-##          Detection Rate : 0.1925          
-##    Detection Prevalence : 0.2994          
-##       Balanced Accuracy : 0.6256          
+##          Detection Rate : 0.1903          
+##    Detection Prevalence : 0.2942          
+##       Balanced Accuracy : 0.6258          
 ##                                           
 ##        &#39;Positive&#39; Class : Returning       
 ## </code></pre>
